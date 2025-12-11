@@ -1,0 +1,56 @@
+================================================================================
+                    START HERE - QUICK FIX
+================================================================================
+
+PROBLEM:
+  npm install fails because Windows SDK is missing.
+
+SOLUTION:
+  Install Windows SDK through Visual Studio Installer.
+
+================================================================================
+QUICK STEPS (5 minutes):
+================================================================================
+
+1. Open Visual Studio Installer
+   - Press Windows Key
+   - Type "Visual Studio Installer"
+   - Press Enter
+
+2. Modify Visual Studio 2019 Build Tools
+   - Click "Modify" button
+
+3. Add Windows SDK
+   - Click "Individual components" tab
+   - Search for "Windows SDK"
+   - Check "Windows 10 SDK (10.0.19041.0)" or newer
+   - Click "Modify" to install
+
+4. Wait for installation (10-20 minutes)
+
+5. Run: npm install
+
+6. Run: npm run electron-dev
+
+================================================================================
+IF VISUAL STUDIO INSTALLER NOT FOUND:
+================================================================================
+
+Download from: https://visualstudio.microsoft.com/downloads/
+  - Download "Build Tools for Visual Studio 2019"
+  - Install it
+  - Then follow steps above
+
+OR install Visual Studio Community (easier):
+  - Download from: https://visualstudio.microsoft.com/vs/community/
+  - Select "Desktop development with C++" during installation
+  - This includes Windows SDK automatically
+
+================================================================================
+DETAILED INSTRUCTIONS:
+================================================================================
+
+See: MANUAL_INSTALL_STEPS.txt
+
+================================================================================
+

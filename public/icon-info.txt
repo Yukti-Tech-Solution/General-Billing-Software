@@ -1,0 +1,12 @@
+Icon File Required
+
+Please add an icon.png file (256x256 pixels recommended) to this directory for the application icon.
+You can create one using any image editing software or download a free icon.
+
+The icon will be used in:
+- Application window
+- Taskbar/dock
+- Built installer packages
+
+Supported formats: PNG, ICO (Windows), ICNS (macOS)
+

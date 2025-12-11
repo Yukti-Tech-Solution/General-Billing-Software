@@ -1,0 +1,53 @@
+================================================================================
+QUICK FIX FOR WINDOWS SDK ISSUE
+================================================================================
+
+PROBLEM:
+  better-sqlite3 requires Windows SDK to compile, but it's missing from
+  your Visual Studio 2019 Build Tools installation.
+
+ERROR MESSAGE:
+  "gyp ERR! find VS - missing any Windows SDK"
+
+SOLUTION (5 MINUTES):
+  
+  1. Open Visual Studio Installer
+     - Press Windows Key, type "Visual Studio Installer", press Enter
+     
+  2. Modify Visual Studio 2019 Build Tools
+     - Find "Visual Studio 2019 Build Tools"
+     - Click "Modify" button
+     
+  3. Add Windows SDK Component
+     - Click "Individual components" tab (at the top)
+     - Search for "Windows SDK"
+     - Check "Windows 10 SDK (10.0.19041.0)" or newer
+     - Click "Modify" to install
+     
+  4. Wait for installation (10-20 minutes)
+     - You may need to restart your computer
+     
+  5. Install dependencies
+     npm install
+
+ALTERNATIVE: Run the fix script
+  .\fix-installation.ps1
+
+DETAILED GUIDE:
+  See install-windows-sdk.md for complete step-by-step instructions
+
+================================================================================
+WHAT IS HAPPENING?
+================================================================================
+
+better-sqlite3 is a native Node.js module written in C++. It needs to be
+compiled for your specific system. To compile C++ code on Windows, you need:
+
+  ✓ Visual Studio Build Tools (you have this)
+  ✓ Windows SDK (you're missing this)
+  ✓ Python (you have this)
+
+Once you add Windows SDK, the compilation will work!
+
+================================================================================
+
