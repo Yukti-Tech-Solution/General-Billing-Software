@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { getCustomers, getProducts, getNextInvoiceNumber, saveInvoice, getInvoice, getInvoiceItems } from '../database/db';
+import { getCustomers, getProducts, getNextInvoiceNumber, saveInvoice, getInvoice, getInvoiceItems, saveCustomer, saveProduct } from '../database/db';
 import { 
   calculateItemAmount, 
   calculateSubtotal, 
@@ -21,6 +21,10 @@ const CreateInvoice = () => {
   const [invoiceNumber, setInvoiceNumber] = useState('');
   const [invoice, setInvoice] = useState({
     customer_id: '',
+    customer_name: '',
+    customer_phone: '',
+    customer_address: '',
+    customer_gstin: '',
     date: format(new Date(), 'yyyy-MM-dd'),
     subtotal: 0,
     discount_percentage: 0,
@@ -42,6 +46,24 @@ const CreateInvoice = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [editingInvoiceId, setEditingInvoiceId] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [customerMode, setCustomerMode] = useState('saved'); // 'saved' | 'quick'
+  const [productMode, setProductMode] = useState('saved'); // 'saved' | 'quick'
+  const [quickCustomer, setQuickCustomer] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    gstin: '',
+    saveToDatabase: false
+  });
+  const [quickProduct, setQuickProduct] = useState({
+    name: '',
+    price: '',
+    description: '',
+    hsn_code: '',
+    tax_rate: 0,
+    quantity: 1,
+    saveToDatabase: false
+  });
 
   useEffect(() => {
     const init = async () => {
@@ -101,6 +123,10 @@ const CreateInvoice = () => {
         setInvoice({
           id: invoiceData.id,
           customer_id: invoiceData.customer_id,
+          customer_name: invoiceData.customer_name || '',
+          customer_phone: invoiceData.customer_phone || '',
+          customer_address: invoiceData.customer_address || '',
+          customer_gstin: invoiceData.customer_gstin || '',
           date: invoiceData.date,
           subtotal: invoiceData.subtotal,
           discount_percentage: invoiceData.discount_percentage || 0,
@@ -122,6 +148,7 @@ const CreateInvoice = () => {
         setItems(invoiceItemsData.map(item => ({
           product_id: item.product_id,
           product_name: item.product_name,
+          description: item.description || '',
           quantity: item.quantity,
           price: item.price,
           amount: item.amount,
@@ -161,38 +188,70 @@ const CreateInvoice = () => {
   };
 
   const handleProductSelect = (product) => {
+    setProductMode('saved');
     setSelectedProduct(product);
     setItemPrice(product.price);
     setItemQuantity(1);
   };
 
   const handleAddItem = () => {
-    if (!selectedProduct) {
-      toast.error('Please select a product');
-      return;
+    if (productMode === 'saved') {
+      if (!selectedProduct) {
+        toast.error('Please select a product');
+        return;
+      }
+      if (itemQuantity <= 0) {
+        toast.error('Quantity must be greater than 0');
+        return;
+      }
+      const amount = calculateItemAmount(itemQuantity, itemPrice);
+      const newItem = {
+        product_id: selectedProduct.id,
+        product_name: selectedProduct.name,
+        description: selectedProduct.description || '',
+        quantity: itemQuantity,
+        price: itemPrice,
+        amount,
+        tax_rate: selectedProduct.tax_rate || 0,
+        hsn_code: selectedProduct.hsn_code || ''
+      };
+      setItems([...items, newItem]);
+      setSelectedProduct(null);
+      setItemQuantity(1);
+      setItemPrice(0);
+      setProductSearch('');
+      toast.success('Item added');
+    } else {
+      if (!quickProduct.name || !quickProduct.price || !quickProduct.quantity) {
+        toast.error('Please enter product name, price, and quantity');
+        return;
+      }
+      const quantity = Number(quickProduct.quantity) || 1;
+      const price = Number(quickProduct.price) || 0;
+      const amount = calculateItemAmount(quantity, price);
+      const newItem = {
+        product_id: null,
+        product_name: quickProduct.name,
+        description: quickProduct.description || '',
+        quantity,
+        price,
+        amount,
+        tax_rate: Number(quickProduct.tax_rate) || 0,
+        hsn_code: quickProduct.hsn_code || '',
+        saveToDatabase: quickProduct.saveToDatabase
+      };
+      setItems([...items, newItem]);
+      setQuickProduct({
+        name: '',
+        price: '',
+        description: '',
+        hsn_code: '',
+        tax_rate: 0,
+        quantity: 1,
+        saveToDatabase: false
+      });
+      toast.success('Custom item added');
     }
-
-    if (itemQuantity <= 0) {
-      toast.error('Quantity must be greater than 0');
-      return;
-    }
-
-    const amount = calculateItemAmount(itemQuantity, itemPrice);
-    const newItem = {
-      product_id: selectedProduct.id,
-      product_name: selectedProduct.name,
-      quantity: itemQuantity,
-      price: itemPrice,
-      amount: amount,
-      tax_rate: selectedProduct.tax_rate || 0,
-      hsn_code: selectedProduct.hsn_code || ''
-    };
-
-    setItems([...items, newItem]);
-    setSelectedProduct(null);
-    setItemQuantity(1);
-    setItemPrice(0);
-    setProductSearch('');
   };
 
   const handleRemoveItem = (index) => {
@@ -200,8 +259,12 @@ const CreateInvoice = () => {
   };
 
   const handleSave = async (isDraft = false) => {
-    if (!invoice.customer_id) {
+    if (customerMode === 'saved' && !invoice.customer_id) {
       toast.error('Please select a customer');
+      return;
+    }
+    if (customerMode === 'quick' && (!quickCustomer.name || !quickCustomer.phone)) {
+      toast.error('Please enter customer name and phone');
       return;
     }
 
@@ -212,26 +275,72 @@ const CreateInvoice = () => {
 
     try {
       setLoading(true);
+      let customerId = invoice.customer_id || null;
+
+      if (customerMode === 'quick') {
+        // Save quick customer if requested
+        if (quickCustomer.saveToDatabase) {
+          customerId = await saveCustomer({
+            name: quickCustomer.name,
+            phone: quickCustomer.phone,
+            address: quickCustomer.address,
+            gstin: quickCustomer.gstin
+          });
+        }
+      }
+
+      // Persist custom products that are marked for save
+      const enrichedItems = [];
+      for (const item of items) {
+        if (!item.product_id && item.saveToDatabase) {
+          const newId = await saveProduct({
+            name: item.product_name,
+            description: item.description || '',
+            price: item.price,
+            hsn_code: item.hsn_code || '',
+            tax_rate: item.tax_rate || 0,
+            stock: 0
+          });
+          enrichedItems.push({ ...item, product_id: newId });
+        } else {
+          enrichedItems.push({ ...item });
+        }
+      }
+
       const invoiceData = {
         ...invoice,
-        invoice_number: invoiceNumber
+        invoice_number: invoiceNumber,
+        customer_id: customerMode === 'saved' ? customerId : customerId || null,
+        customer_name: customerMode === 'quick' ? quickCustomer.name : invoice.customer_name,
+        customer_phone: customerMode === 'quick' ? quickCustomer.phone : invoice.customer_phone,
+        customer_address: customerMode === 'quick' ? quickCustomer.address : invoice.customer_address,
+        customer_gstin: customerMode === 'quick' ? quickCustomer.gstin : invoice.customer_gstin
       };
-      
+
+      if (customerMode === 'saved') {
+        const selected = customers.find(c => c.id === customerId);
+        if (selected) {
+          invoiceData.customer_name = selected.name;
+          invoiceData.customer_phone = selected.phone;
+          invoiceData.customer_address = selected.address;
+          invoiceData.customer_gstin = selected.gstin;
+        }
+      } else if (!quickCustomer.saveToDatabase) {
+        invoiceData.customer_id = null;
+      }
+
       if (editingInvoiceId) {
         invoiceData.id = editingInvoiceId;
       }
-      
-      const savedInvoiceId = await saveInvoice(invoiceData, items);
+
+      const savedInvoiceId = await saveInvoice(invoiceData, enrichedItems);
       toast.success(isDraft ? 'Invoice saved as draft' : 'Invoice saved successfully');
-      
+
       if (!isDraft) {
         navigate('/invoices');
-      } else {
-        // Update the invoice ID if it was a new invoice
-        if (!editingInvoiceId) {
-          setEditingInvoiceId(savedInvoiceId);
-          setInvoice(prev => ({ ...prev, id: savedInvoiceId }));
-        }
+      } else if (!editingInvoiceId) {
+        setEditingInvoiceId(savedInvoiceId);
+        setInvoice(prev => ({ ...prev, id: savedInvoiceId }));
       }
     } catch (error) {
       toast.error('Failed to save invoice');
@@ -294,44 +403,113 @@ const CreateInvoice = () => {
           {/* Customer Selection */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Customer Details</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Customer <span className="text-red-500">*</span>
-                </label>
+            <div className="flex flex-wrap gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => setCustomerMode('saved')}
+                className={`px-4 py-2 rounded-lg border ${customerMode === 'saved' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+              >
+                Select Saved Customer
+              </button>
+              <button
+                type="button"
+                onClick={() => setCustomerMode('quick')}
+                className={`px-4 py-2 rounded-lg border ${customerMode === 'quick' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+              >
+                Quick Customer Entry
+              </button>
+            </div>
+
+            {customerMode === 'saved' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Customer <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Search customers..."
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  {customerSearch && (
+                    <div className="mt-2 border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
+                      {filteredCustomers.map(customer => (
+                        <div
+                          key={customer.id}
+                          onClick={() => {
+                            setInvoice(prev => ({ ...prev, customer_id: customer.id }));
+                            setCustomerSearch(customer.name);
+                            setInvoice(prev => ({
+                              ...prev,
+                              customer_name: customer.name,
+                              customer_phone: customer.phone || '',
+                              customer_address: customer.address || '',
+                              customer_gstin: customer.gstin || ''
+                            }));
+                          }}
+                          className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                        >
+                          <div className="font-medium">{customer.name}</div>
+                          {customer.phone && (
+                            <div className="text-sm text-gray-500">{customer.phone}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {invoice.customer_id && (
+                    <div className="mt-2 text-sm text-gray-600">
+                      Selected: {customers.find(c => c.id === invoice.customer_id)?.name}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 p-4 border rounded-lg bg-gray-50">
                 <input
                   type="text"
-                  placeholder="Search customers..."
-                  value={customerSearch}
-                  onChange={(e) => setCustomerSearch(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="Customer Name *"
+                  value={quickCustomer.name}
+                  onChange={(e) => setQuickCustomer({ ...quickCustomer, name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                  required
                 />
-                {customerSearch && (
-                  <div className="mt-2 border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
-                    {filteredCustomers.map(customer => (
-                      <div
-                        key={customer.id}
-                        onClick={() => {
-                          setInvoice(prev => ({ ...prev, customer_id: customer.id }));
-                          setCustomerSearch(customer.name);
-                        }}
-                        className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
-                      >
-                        <div className="font-medium">{customer.name}</div>
-                        {customer.phone && (
-                          <div className="text-sm text-gray-500">{customer.phone}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {invoice.customer_id && (
-                  <div className="mt-2 text-sm text-gray-600">
-                    Selected: {customers.find(c => c.id === invoice.customer_id)?.name}
-                  </div>
-                )}
+                <input
+                  type="tel"
+                  placeholder="Contact Number *"
+                  value={quickCustomer.phone}
+                  onChange={(e) => setQuickCustomer({ ...quickCustomer, phone: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                  required
+                />
+                <input
+                  type="text"
+                  placeholder="Address (optional)"
+                  value={quickCustomer.address}
+                  onChange={(e) => setQuickCustomer({ ...quickCustomer, address: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                />
+                <input
+                  type="text"
+                  placeholder="GSTIN (optional)"
+                  value={quickCustomer.gstin}
+                  onChange={(e) => setQuickCustomer({ ...quickCustomer, gstin: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                />
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={quickCustomer.saveToDatabase}
+                    onChange={(e) => setQuickCustomer({ ...quickCustomer, saveToDatabase: e.target.checked })}
+                  />
+                  <span>Save this customer for future use</span>
+                </label>
               </div>
+            )}
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Invoice Date
@@ -361,75 +539,169 @@ const CreateInvoice = () => {
           {/* Add Items */}
           <div className="bg-white rounded-lg shadow-md p-6">
             <h2 className="text-xl font-semibold text-gray-800 mb-4">Add Items</h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Select Product
-                </label>
-                <input
-                  type="text"
-                  placeholder="Search products..."
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-                {productSearch && (
-                  <div className="mt-2 border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
-                    {filteredProducts.map(product => (
-                      <div
-                        key={product.id}
-                        onClick={() => handleProductSelect(product)}
-                        className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
-                      >
-                        <div className="font-medium">{product.name}</div>
-                        <div className="text-sm text-gray-500">
-                          Price: {formatCurrency(product.price)} | Stock: {product.stock}
+
+            <div className="flex flex-wrap gap-3 mb-4">
+              <button
+                type="button"
+                onClick={() => setProductMode('saved')}
+                className={`px-4 py-2 rounded-lg border ${productMode === 'saved' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+              >
+                Select from Product List
+              </button>
+              <button
+                type="button"
+                onClick={() => setProductMode('quick')}
+                className={`px-4 py-2 rounded-lg border ${productMode === 'quick' ? 'bg-blue-600 text-white border-blue-600' : 'bg-gray-100 text-gray-700 border-gray-200'}`}
+              >
+                Add Custom Item
+              </button>
+            </div>
+
+            {productMode === 'saved' ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Select Product
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Search products..."
+                    value={productSearch}
+                    onChange={(e) => setProductSearch(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  />
+                  {productSearch && (
+                    <div className="mt-2 border border-gray-300 rounded-lg max-h-48 overflow-y-auto">
+                      {filteredProducts.map(product => (
+                        <div
+                          key={product.id}
+                          onClick={() => handleProductSelect(product)}
+                          className="p-3 hover:bg-gray-50 cursor-pointer border-b border-gray-200 last:border-b-0"
+                        >
+                          <div className="font-medium">{product.name}</div>
+                          <div className="text-sm text-gray-500">
+                            Price: {formatCurrency(product.price)} | Stock: {product.stock}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {selectedProduct && (
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Quantity
+                      </label>
+                      <input
+                        type="number"
+                        value={itemQuantity}
+                        onChange={(e) => setItemQuantity(parseFloat(e.target.value) || 0)}
+                        min="0.01"
+                        step="0.01"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Price
+                      </label>
+                      <input
+                        type="number"
+                        value={itemPrice}
+                        onChange={(e) => setItemPrice(parseFloat(e.target.value) || 0)}
+                        min="0"
+                        step="0.01"
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <button
+                        onClick={handleAddItem}
+                        className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                      >
+                        Add Item
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-
-              {selectedProduct && (
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Quantity
-                    </label>
-                    <input
-                      type="number"
-                      value={itemQuantity}
-                      onChange={(e) => setItemQuantity(parseFloat(e.target.value) || 0)}
-                      min="0.01"
-                      step="0.01"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Price
-                    </label>
-                    <input
-                      type="number"
-                      value={itemPrice}
-                      onChange={(e) => setItemPrice(parseFloat(e.target.value) || 0)}
-                      min="0"
-                      step="0.01"
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                  <div className="flex items-end">
-                    <button
-                      onClick={handleAddItem}
-                      className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
-                    >
-                      Add Item
-                    </button>
-                  </div>
+            ) : (
+              <div className="space-y-3 p-4 border rounded-lg bg-gray-50">
+                <input
+                  type="text"
+                  placeholder="Product Name *"
+                  value={quickProduct.name}
+                  onChange={(e) => setQuickProduct({ ...quickProduct, name: e.target.value })}
+                  className="w-full px-3 py-2 border rounded"
+                  required
+                />
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <input
+                    type="number"
+                    placeholder="Price *"
+                    value={quickProduct.price}
+                    min="0"
+                    step="0.01"
+                    onChange={(e) => setQuickProduct({ ...quickProduct, price: e.target.value })}
+                    className="w-full px-3 py-2 border rounded"
+                    required
+                  />
+                  <input
+                    type="number"
+                    placeholder="Quantity *"
+                    value={quickProduct.quantity}
+                    min="1"
+                    step="0.01"
+                    onChange={(e) => setQuickProduct({ ...quickProduct, quantity: e.target.value })}
+                    className="w-full px-3 py-2 border rounded"
+                    required
+                  />
                 </div>
-              )}
-            </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <input
+                    type="text"
+                    placeholder="HSN Code (optional)"
+                    value={quickProduct.hsn_code}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, hsn_code: e.target.value })}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                  <input
+                    type="number"
+                    placeholder="Tax Rate % (optional)"
+                    value={quickProduct.tax_rate}
+                    min="0"
+                    step="0.01"
+                    onChange={(e) => setQuickProduct({ ...quickProduct, tax_rate: e.target.value })}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Description (optional)"
+                    value={quickProduct.description}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, description: e.target.value })}
+                    className="w-full px-3 py-2 border rounded"
+                  />
+                </div>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={quickProduct.saveToDatabase}
+                    onChange={(e) => setQuickProduct({ ...quickProduct, saveToDatabase: e.target.checked })}
+                  />
+                  <span>Save this product for future use</span>
+                </label>
+                <div className="flex justify-end">
+                  <button
+                    onClick={handleAddItem}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+                  >
+                    Add Custom Item
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Items Table */}
@@ -591,7 +863,16 @@ const CreateInvoice = () => {
           invoice={invoice}
           invoiceNumber={invoiceNumber}
           items={items}
-          customer={invoice.customer_id ? customers.find(c => c.id === invoice.customer_id) : null}
+          customer={
+            invoice.customer_id
+              ? customers.find(c => c.id === invoice.customer_id)
+              : {
+                  name: invoice.customer_name || quickCustomer.name,
+                  phone: invoice.customer_phone || quickCustomer.phone,
+                  address: invoice.customer_address || quickCustomer.address,
+                  gstin: invoice.customer_gstin || quickCustomer.gstin
+                }
+          }
           onClose={() => setShowPreview(false)}
           onPrint={() => window.print()}
         />

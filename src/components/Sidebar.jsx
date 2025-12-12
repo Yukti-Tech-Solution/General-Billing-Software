@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 
-const Sidebar = () => {
+const Sidebar = ({ adminMode = false }) => {
   const location = useLocation();
 
   const menuItems = [
@@ -11,6 +11,7 @@ const Sidebar = () => {
     { path: '/products', label: 'Products', icon: '📦' },
     { path: '/customers', label: 'Customers', icon: '👥' },
     { path: '/settings', label: 'Settings', icon: '⚙️' },
+    ...(adminMode ? [{ path: '/licenses', label: 'License Manager', icon: '🛡️' }] : []),
   ];
 
   return (

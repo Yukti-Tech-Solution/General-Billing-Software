@@ -1,5 +1,6 @@
 // Database operations wrapper
 import { syncCompany, syncProducts, syncCustomers, syncInvoices } from './syncManager';
+import { generateLicenseKey } from '../utils/licenseGenerator';
 
 // Helper function to get device ID
 const getDeviceId = () => {
@@ -160,6 +161,11 @@ export const deleteCustomer = async (id) => {
   // For now, we'll just delete locally
 };
 
+// Quick customer helper
+export const insertQuickCustomer = async (customer) => {
+  return await saveCustomer(customer);
+};
+
 // Product operations
 export const getProducts = async (search = '') => {
   if (search) {
@@ -214,6 +220,11 @@ export const deleteProduct = async (id) => {
   // Note: In production, you might want to mark as deleted and sync deletion
 };
 
+// Quick product helper
+export const insertQuickProduct = async (product) => {
+  return await saveProduct(product);
+};
+
 // Invoice operations
 export const getNextInvoiceNumber = async () => {
   const year = new Date().getFullYear();
@@ -236,7 +247,9 @@ export const getNextInvoiceNumber = async () => {
 export const getInvoices = async (fromDate = null, toDate = null) => {
   if (fromDate && toDate) {
     return await dbQuery(
-      `SELECT i.*, c.name as customer_name, c.phone as customer_phone 
+      `SELECT i.*, 
+              COALESCE(i.customer_name, c.name) as customer_name, 
+              COALESCE(i.customer_phone, c.phone) as customer_phone 
        FROM invoices i 
        LEFT JOIN customers c ON i.customer_id = c.id 
        WHERE i.date >= ? AND i.date <= ? 
@@ -245,7 +258,9 @@ export const getInvoices = async (fromDate = null, toDate = null) => {
     );
   }
   return await dbQuery(
-    `SELECT i.*, c.name as customer_name, c.phone as customer_phone 
+    `SELECT i.*, 
+            COALESCE(i.customer_name, c.name) as customer_name, 
+            COALESCE(i.customer_phone, c.phone) as customer_phone 
      FROM invoices i 
      LEFT JOIN customers c ON i.customer_id = c.id 
      ORDER BY i.date DESC, i.id DESC`
@@ -254,7 +269,11 @@ export const getInvoices = async (fromDate = null, toDate = null) => {
 
 export const getInvoice = async (id) => {
   const result = await dbQuery(
-    `SELECT i.*, c.name as customer_name, c.phone as customer_phone, c.address as customer_address, c.gstin as customer_gstin
+    `SELECT i.*, 
+            COALESCE(i.customer_name, c.name) as customer_name, 
+            COALESCE(i.customer_phone, c.phone) as customer_phone, 
+            COALESCE(i.customer_address, c.address) as customer_address, 
+            COALESCE(i.customer_gstin, c.gstin) as customer_gstin
      FROM invoices i 
      LEFT JOIN customers c ON i.customer_id = c.id 
      WHERE i.id = ?`,
@@ -265,7 +284,11 @@ export const getInvoice = async (id) => {
 
 export const getInvoiceItems = async (invoiceId) => {
   return await dbQuery(
-    `SELECT ii.*, p.name as product_name, p.hsn_code, p.tax_rate 
+    `SELECT ii.*, 
+            COALESCE(ii.product_name, p.name) as product_name, 
+            COALESCE(ii.hsn_code, p.hsn_code) as hsn_code, 
+            COALESCE(ii.tax_rate, p.tax_rate) as tax_rate,
+            COALESCE(ii.description, p.description) as description
      FROM invoice_items ii 
      LEFT JOIN products p ON ii.product_id = p.id 
      WHERE ii.invoice_id = ?`,
@@ -283,13 +306,19 @@ export const saveInvoice = async (invoice, items) => {
     // Update invoice
     await dbQuery(
       `UPDATE invoices SET 
-        customer_id = ?, date = ?, subtotal = ?, discount_percentage = ?, 
+        customer_id = ?, customer_name = ?, customer_phone = ?, customer_address = ?, customer_gstin = ?, 
+        date = ?, subtotal = ?, discount_percentage = ?, 
         discount_amount = ?, tax_amount = ?, total = ?, paid_amount = ?, 
         balance = ?, status = ?, notes = ?,
         userId = ?, syncStatus = 'pending', lastModified = ?, lastModifiedBy = ?
         WHERE id = ?`,
       [
-        invoice.customer_id, invoice.date, invoice.subtotal,
+        invoice.customer_id || null,
+        invoice.customer_name || null,
+        invoice.customer_phone || null,
+        invoice.customer_address || null,
+        invoice.customer_gstin || null,
+        invoice.date, invoice.subtotal,
         invoice.discount_percentage, invoice.discount_amount,
         invoice.tax_amount, invoice.total, invoice.paid_amount,
         invoice.balance, invoice.status, invoice.notes,
@@ -304,12 +333,16 @@ export const saveInvoice = async (invoice, items) => {
     // Insert new invoice
     const result = await dbQuery(
       `INSERT INTO invoices (
-        invoice_number, customer_id, date, subtotal, discount_percentage,
+        invoice_number, customer_id, customer_name, customer_phone, customer_address, customer_gstin,
+        date, subtotal, discount_percentage,
         discount_amount, tax_amount, total, paid_amount, balance, status, notes,
         userId, syncStatus, lastModified, lastModifiedBy
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`,
       [
-        invoice.invoice_number, invoice.customer_id, invoice.date,
+        invoice.invoice_number, invoice.customer_id || null,
+        invoice.customer_name || null, invoice.customer_phone || null,
+        invoice.customer_address || null, invoice.customer_gstin || null,
+        invoice.date,
         invoice.subtotal, invoice.discount_percentage, invoice.discount_amount,
         invoice.tax_amount, invoice.total, invoice.paid_amount,
         invoice.balance, invoice.status, invoice.notes,
@@ -322,8 +355,20 @@ export const saveInvoice = async (invoice, items) => {
   // Insert items
   for (const item of items) {
     await dbQuery(
-      'INSERT INTO invoice_items (invoice_id, product_id, quantity, price, amount) VALUES (?, ?, ?, ?, ?)',
-      [invoiceId, item.product_id, item.quantity, item.price, item.amount]
+      `INSERT INTO invoice_items (
+        invoice_id, product_id, product_name, description, hsn_code, tax_rate, quantity, price, amount
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        invoiceId,
+        item.product_id || null,
+        item.product_name || null,
+        item.description || null,
+        item.hsn_code || null,
+        item.tax_rate || 0,
+        item.quantity,
+        item.price,
+        item.amount
+      ]
     );
   }
   
@@ -337,6 +382,115 @@ export const deleteInvoice = async (id) => {
   await dbQuery('DELETE FROM invoices WHERE id = ?', [id]);
   
   // Note: In production, you might want to mark as deleted and sync deletion
+};
+
+// License operations
+const addDays = (date, days) => {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+
+export const insertLicense = async ({ email, name, durationDays = 365, notes = '' }) => {
+  const activationDate = new Date();
+  const expiryDate = addDays(activationDate, durationDays);
+  const licenseKey = generateLicenseKey();
+  const result = await dbQuery(
+    `INSERT INTO licenses (customer_email, customer_name, activation_date, expiry_date, is_active, license_key, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      email.trim().toLowerCase(),
+      name,
+      activationDate.toISOString(),
+      expiryDate.toISOString(),
+      1,
+      licenseKey,
+      notes
+    ]
+  );
+  return { id: result.lastInsertRowid, license_key: licenseKey, expiry_date: expiryDate.toISOString() };
+};
+
+export const getLicenses = async (search = '') => {
+  if (search) {
+    const term = `%${search.toLowerCase()}%`;
+    return await dbQuery(
+      `SELECT * FROM licenses 
+       WHERE LOWER(customer_email) LIKE ? OR LOWER(customer_name) LIKE ?
+       ORDER BY created_at DESC`,
+      [term, term]
+    );
+  }
+  return await dbQuery('SELECT * FROM licenses ORDER BY created_at DESC');
+};
+
+export const getLicenseByEmailAndKey = async (email, licenseKey) => {
+  const result = await dbQuery(
+    `SELECT * FROM licenses WHERE LOWER(customer_email) = ? AND license_key = ? LIMIT 1`,
+    [email.trim().toLowerCase(), licenseKey.trim()]
+  );
+  return result.length ? result[0] : null;
+};
+
+export const getLicenseStatus = async () => {
+  const result = await dbQuery(
+    `SELECT * FROM licenses 
+     WHERE is_active = 1 
+     ORDER BY expiry_date DESC 
+     LIMIT 1`
+  );
+  if (!result.length) return { status: 'not_found' };
+
+  const license = result[0];
+  const now = new Date();
+  const expiry = new Date(license.expiry_date);
+  const daysRemaining = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+
+  if (expiry < now) return { status: 'expired', license, daysRemaining: 0 };
+  return { status: 'valid', license, daysRemaining };
+};
+
+export const validateLicenseKey = async (email, licenseKey) => {
+  const license = await getLicenseByEmailAndKey(email, licenseKey);
+  if (!license) return { valid: false, status: 'not_found' };
+  if (!license.is_active) return { valid: false, status: 'inactive', license };
+
+  const now = new Date();
+  const expiry = new Date(license.expiry_date);
+  if (expiry < now) return { valid: false, status: 'expired', license };
+
+  return { valid: true, status: 'valid', license };
+};
+
+export const activateLicense = async (email, licenseKey) => {
+  const validation = await validateLicenseKey(email, licenseKey);
+  if (!validation.valid) {
+    return { success: false, status: validation.status };
+  }
+
+  const nowIso = new Date().toISOString();
+  await dbQuery(
+    `UPDATE licenses SET is_active = 1, activation_date = ? WHERE id = ?`,
+    [nowIso, validation.license.id]
+  );
+  return { success: true, license: { ...validation.license, activation_date: nowIso } };
+};
+
+export const extendLicense = async (id, additionalDays) => {
+  const current = await dbQuery(`SELECT * FROM licenses WHERE id = ?`, [id]);
+  if (!current.length) throw new Error('License not found');
+  const license = current[0];
+  const newExpiry = addDays(new Date(license.expiry_date), additionalDays);
+  await dbQuery(`UPDATE licenses SET expiry_date = ?, is_active = 1 WHERE id = ?`, [
+    newExpiry.toISOString(),
+    id,
+  ]);
+  return { expiry_date: newExpiry.toISOString() };
+};
+
+export const disableLicense = async (id) => {
+  await dbQuery(`UPDATE licenses SET is_active = 0 WHERE id = ?`, [id]);
+  return { success: true };
 };
 
 // Dashboard statistics

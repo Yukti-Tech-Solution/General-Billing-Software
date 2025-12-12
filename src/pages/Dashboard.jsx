@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { format } from 'date-fns';
 import { formatCurrency } from '../utils/calculations';
-import { getDashboardStats } from '../database/db';
+import { getDashboardStats, getLicenseStatus } from '../database/db';
 import { toast } from 'react-toastify';
 
 const Dashboard = () => {
@@ -15,9 +15,11 @@ const Dashboard = () => {
     recentInvoices: []
   });
   const [loading, setLoading] = useState(true);
+  const [licenseInfo, setLicenseInfo] = useState(null);
 
   useEffect(() => {
     loadStats();
+    loadLicenseStatus();
   }, []);
 
   const loadStats = async () => {
@@ -30,6 +32,15 @@ const Dashboard = () => {
       console.error('Error loading stats:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadLicenseStatus = async () => {
+    try {
+      const status = await getLicenseStatus();
+      setLicenseInfo(status);
+    } catch (error) {
+      console.error('Failed to load license status', error);
     }
   };
 
@@ -52,6 +63,32 @@ const Dashboard = () => {
           + New Invoice
         </Link>
       </div>
+
+      {licenseInfo?.status === 'valid' && (
+        <div
+          className={`rounded-lg border p-4 ${
+            licenseInfo.daysRemaining <= 7
+              ? 'bg-red-50 border-red-200 text-red-800'
+              : licenseInfo.daysRemaining <= 30
+              ? 'bg-yellow-50 border-yellow-200 text-yellow-800'
+              : 'bg-green-50 border-green-200 text-green-800'
+          }`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-semibold">
+                License valid until {new Date(licenseInfo.license.expiry_date).toLocaleDateString()}
+              </p>
+              {licenseInfo.daysRemaining <= 30 && (
+                <p className="text-sm">
+                  {licenseInfo.daysRemaining} day(s) remaining. Please plan renewal.
+                </p>
+              )}
+            </div>
+            {licenseInfo.daysRemaining <= 30 && <span className="text-2xl">🛡️</span>}
+          </div>
+        </div>
+      )}
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">

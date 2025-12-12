@@ -107,7 +107,7 @@ const Header = () => {
         <div className="flex items-center space-x-6">
           {/* Sync Status Indicator */}
           {getSyncIcon()}
-          
+
           {/* Date and Time */}
           <div className="text-right">
             <p className="text-sm text-gray-600">
@@ -117,6 +117,35 @@ const Header = () => {
               {format(currentDate, 'hh:mm:ss a')}
             </p>
           </div>
+
+          {/* Yukti Tech Solution website link */}
+          <a
+            href="https://yuktitechsolution.co.in/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center space-x-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+          >
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth="2"
+                d="M9 17v-2a2 2 0 012-2h2m4 4V7a2 2 0 00-2-2H9l-4 4v6a2 2 0 002 2h6a2 2 0 002-2z"
+              />
+            </svg>
+            <div className="flex flex-col text-left leading-none">
+              <span>General Billing Software</span>
+              <span className="text-[11px] font-normal text-blue-100">
+                Visit Yukti Tech Solution
+              </span>
+            </div>
+          </a>
         </div>
       </div>
     </header>

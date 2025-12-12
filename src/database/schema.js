@@ -49,7 +49,11 @@ export const createTables = `
   CREATE TABLE IF NOT EXISTS invoices (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     invoice_number TEXT UNIQUE NOT NULL,
-    customer_id INTEGER NOT NULL,
+    customer_id INTEGER,
+    customer_name TEXT,
+    customer_phone TEXT,
+    customer_address TEXT,
+    customer_gstin TEXT,
     date TEXT NOT NULL,
     subtotal REAL NOT NULL DEFAULT 0,
     discount_percentage REAL DEFAULT 0,
@@ -72,12 +76,28 @@ export const createTables = `
   CREATE TABLE IF NOT EXISTS invoice_items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     invoice_id INTEGER NOT NULL,
-    product_id INTEGER NOT NULL,
+    product_id INTEGER,
+    product_name TEXT,
+    description TEXT,
+    hsn_code TEXT,
+    tax_rate REAL DEFAULT 0,
     quantity REAL NOT NULL,
     price REAL NOT NULL,
     amount REAL NOT NULL,
     FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE CASCADE,
     FOREIGN KEY (product_id) REFERENCES products(id)
+  );
+
+  CREATE TABLE IF NOT EXISTS licenses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_email TEXT UNIQUE NOT NULL,
+    customer_name TEXT NOT NULL,
+    activation_date TEXT NOT NULL,
+    expiry_date TEXT NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    license_key TEXT UNIQUE,
+    notes TEXT,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
   );
 
   CREATE TABLE IF NOT EXISTS sync_metadata (
@@ -197,6 +217,38 @@ export const initializeDatabase = async () => {
       await addColumnIfNotExists('invoices', 'syncStatus', "TEXT DEFAULT 'pending'");
       await addColumnIfNotExists('invoices', 'lastModified', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
       await addColumnIfNotExists('invoices', 'lastModifiedBy', 'TEXT');
+      await addColumnIfNotExists('invoices', 'customer_name', 'TEXT');
+      await addColumnIfNotExists('invoices', 'customer_phone', 'TEXT');
+      await addColumnIfNotExists('invoices', 'customer_address', 'TEXT');
+      await addColumnIfNotExists('invoices', 'customer_gstin', 'TEXT');
+
+      await addColumnIfNotExists('invoice_items', 'product_name', 'TEXT');
+      await addColumnIfNotExists('invoice_items', 'description', 'TEXT');
+      await addColumnIfNotExists('invoice_items', 'hsn_code', 'TEXT');
+      await addColumnIfNotExists('invoice_items', 'tax_rate', 'REAL DEFAULT 0');
+
+      // Licenses table and columns (in case table already exists without fields)
+      await window.electronAPI.dbQuery(
+        `CREATE TABLE IF NOT EXISTS licenses (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          customer_email TEXT UNIQUE NOT NULL,
+          customer_name TEXT NOT NULL,
+          activation_date TEXT NOT NULL,
+          expiry_date TEXT NOT NULL,
+          is_active INTEGER DEFAULT 1,
+          license_key TEXT UNIQUE,
+          notes TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )`
+      );
+      await addColumnIfNotExists('licenses', 'customer_email', 'TEXT');
+      await addColumnIfNotExists('licenses', 'customer_name', 'TEXT');
+      await addColumnIfNotExists('licenses', 'activation_date', 'TEXT');
+      await addColumnIfNotExists('licenses', 'expiry_date', 'TEXT');
+      await addColumnIfNotExists('licenses', 'is_active', 'INTEGER DEFAULT 1');
+      await addColumnIfNotExists('licenses', 'license_key', 'TEXT');
+      await addColumnIfNotExists('licenses', 'notes', 'TEXT');
+      await addColumnIfNotExists('licenses', 'created_at', 'TEXT DEFAULT CURRENT_TIMESTAMP');
     } catch (migrationError) {
       console.warn('Migration warnings (may be expected):', migrationError);
     }
