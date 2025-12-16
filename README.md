@@ -2,6 +2,8 @@
 
 A complete desktop billing software application built with Electron, React, SQLite, and Tailwind CSS.
 
+> **Important:** This is proprietary software owned by Yukti Tech Solution. It is not open source. Use is limited to licensed customers and partners. For licensing or purchase, contact https://yuktitechsolution.co.in/ or email yuktitechsolution@gmail.com.
+
 ## Features
 
 - **Dashboard**: View sales statistics, pending payments, and recent invoices
@@ -11,8 +13,10 @@ A complete desktop billing software application built with Electron, React, SQLi
 - **Invoice Creation**: Create invoices with automatic calculations
 - **Invoice History**: View, filter, edit, and delete invoices
 - **Invoice Preview & Print**: Professional invoice preview with print and PDF export
-- **PDF Generation**: Export invoices as PDF files
+- **PDF Generation**: Export invoices as PDF files (automatically organized by month-year)
+- **Organized File Storage**: Invoices saved to `data/bills/[month-year]/` folder structure
 - **Local Database**: SQLite database for offline data storage
+- **Test Login System**: Built-in test credentials for demo/testing
 
 ## Technology Stack
 
@@ -28,11 +32,24 @@ A complete desktop billing software application built with Electron, React, SQLi
 
 ## Prerequisites
 
-- Node.js (v16 or higher) - Recommended: v18 LTS or v20 LTS
-- npm or yarn
-- **Windows Users**: Visual Studio Build Tools with Windows SDK (see Windows Installation below)
+- Node.js (v18 or higher) - Recommended: v18 LTS or v20 LTS
+- npm (comes with Node.js)
+- **Windows Users**: Visual Studio Build Tools with Windows SDK (required for better-sqlite3)
 
-## Installation
+## Quick Start (Windows)
+
+**Easiest way to run the project:**
+
+1. Double-click `run-project.bat`
+   - This will automatically check for Node.js
+   - Install all dependencies if needed
+   - Create necessary folders
+   - Start the application
+   - Use `run-project.bat --force-install` if you want to reinstall dependencies
+
+That's it! The BAT file handles everything automatically.
+
+## Manual Installation
 
 ### Windows Users - IMPORTANT
 
@@ -54,11 +71,6 @@ A complete desktop billing software application built with Electron, React, SQLi
    npm install
    ```
 
-**Alternative**: Run the fix script:
-```powershell
-.\fix-installation.ps1
-```
-
 ### All Platforms
 
 1. Clone the repository or extract the project files
@@ -68,24 +80,24 @@ A complete desktop billing software application built with Electron, React, SQLi
 npm install
 ```
 
-**Note**: If `better-sqlite3` installation fails on Windows, see [INSTALL_WINDOWS.md](INSTALL_WINDOWS.md) for detailed troubleshooting.
+**Note**: If `better-sqlite3` installation fails on Windows, ensure Windows SDK is installed (see above).
 
-## Development
+## Running the Application
 
-1. Start the development server:
+### Option 1: Use the BAT file (Windows - Recommended)
 ```bash
-npm run dev
+run-project.bat
 ```
 
-2. In a separate terminal, start Electron:
-```bash
-npm run electron-dev
-```
-
-Or use the combined command:
+### Option 2: Manual start
 ```bash
 npm run electron-dev
 ```
+
+This command will:
+- Start the Vite development server
+- Launch Electron window
+- Enable hot module replacement
 
 ## Building for Production
 
@@ -176,12 +188,25 @@ The built installers will be in the `dist` folder.
 
 ## Usage
 
-1. **Setup Company**: Go to Settings and add your company details
-2. **Add Products**: Navigate to Products and add your products
-3. **Add Customers**: Navigate to Customers and add your customers
-4. **Create Invoice**: Go to Create Invoice, select customer, add items, and save
-5. **View Invoices**: Check Invoice History to view, edit, or delete invoices
-6. **Print/Export**: Use the Preview button to print or download as PDF
+1. **Login**: Use test credentials (see login screen for details)
+   - Admin: `vaibhavwaghalkar2@gmail.com` / `admin123`
+   - Test: `test@yuktitechsolution.com` / `test123`
+   - Demo: `demo@demo.com` / `demo123`
+
+2. **Setup Company**: Go to Settings and add your company details
+
+3. **Add Products**: Navigate to Products and add your products
+
+4. **Add Customers**: Navigate to Customers and add your customers
+
+5. **Create Invoice**: Go to Create Invoice, select customer, add items, and save
+
+6. **View Invoices**: Check Invoice History to view, edit, or delete invoices
+
+7. **Print/Export**: 
+   - **Print**: Click Print button in invoice preview (uses Electron print dialog)
+   - **Download PDF**: Click Download PDF button - files are automatically saved to `data/bills/[month-year]/` folder
+   - Example: Invoice from December 2025 → `data/bills/12-2025/INV-2025-001.pdf`
 
 ## Invoice Number Format
 
@@ -236,11 +261,11 @@ If Electron doesn't start:
 
 ## License
 
-MIT
+Proprietary software owned by Yukti Tech Solution. All rights reserved. No redistribution or public use is allowed without a written license agreement. For licensing or purchase, contact https://yuktitechsolution.co.in/ or email yuktitechsolution@gmail.com.
 
 ## Support
 
-For issues or questions, please check the code comments or create an issue in the repository.
+For issues, licensing, or purchasing, contact yuktitechsolution@gmail.com or visit https://yuktitechsolution.co.in/.
 
 ## Version
 

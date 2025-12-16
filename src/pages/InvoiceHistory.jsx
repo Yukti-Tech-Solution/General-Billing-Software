@@ -74,8 +74,17 @@ const InvoiceHistory = () => {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
+  const handlePrint = async () => {
+    if (window.electronAPI && window.electronAPI.printInvoice) {
+      try {
+        await window.electronAPI.printInvoice();
+      } catch (error) {
+        console.error('Print error:', error);
+        toast.error('Failed to print: ' + error.message);
+      }
+    } else {
+      window.print();
+    }
   };
 
   const handleDownloadPDF = async (invoice) => {
@@ -84,9 +93,14 @@ const InvoiceHistory = () => {
       const items = await getInvoiceItems(invoice.id);
       const customer = await getCustomer(invoice.customer_id);
       const company = await getCompany();
-      await generateInvoicePDF(invoiceData, company, customer, items);
+      const result = await generateInvoicePDF(invoiceData, company, customer, items);
+      if (result.success) {
+        toast.success(`PDF saved successfully!`);
+      } else {
+        toast.error(`Failed to generate PDF: ${result.error || 'Unknown error'}`);
+      }
     } catch (error) {
-      toast.error('Failed to generate PDF');
+      toast.error('Failed to generate PDF: ' + error.message);
       console.error('Error generating PDF:', error);
     }
   };

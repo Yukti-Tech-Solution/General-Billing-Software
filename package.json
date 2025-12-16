@@ -24,8 +24,8 @@
     "react",
     "sqlite"
   ],
-  "author": "Your Name",
-  "license": "MIT",
+  "author": "Yukti Tech Solution <yuktitechsolution@gmail.com>",
+  "license": "Proprietary",
   "dependencies": {
     "better-sqlite3": "^9.2.2",
     "date-fns": "^2.30.0",

@@ -1,0 +1,24 @@
+Proprietary License - Yukti Tech Solution
+
+Copyright (c) 2025 Yukti Tech Solution. All rights reserved.
+
+This software is proprietary and confidential. Unauthorized copying,
+modification, distribution, or use of this software, in whole or in part,
+is strictly prohibited without prior written consent from Yukti Tech
+Solution.
+
+Access to and use of this software are granted only to licensed customers
+and partners under a valid written agreement with Yukti Tech Solution.
+
+You may not:
+- Redistribute, sublicense, or make the software publicly available.
+- Reverse engineer, decompile, or disassemble the software except where
+  required by applicable law.
+- Remove or obscure copyright, trademark, or other proprietary notices.
+
+For licensing, purchasing, or additional permissions, contact:
+Website: https://yuktitechsolution.co.in/
+Email: yuktitechsolution@gmail.com
+
+If you do not have a written agreement with Yukti Tech Solution, you are
+not permitted to use this software.

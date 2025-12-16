@@ -859,8 +859,8 @@ See `TROUBLESHOOTING.md` for detailed solutions.
 ## 🔄 Version Information
 
 - **Current Version:** 1.0.0
-- **License:** MIT
-- **Author:** Your Name (Update in package.json)
+- **License:** Proprietary (Yukti Tech Solution - contact yuktitechsolution@gmail.com)
+- **Author:** Yukti Tech Solution <yuktitechsolution@gmail.com>
 
 ---
 

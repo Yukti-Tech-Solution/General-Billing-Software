@@ -36,10 +36,15 @@ const InvoicePreview = ({ invoice, invoiceNumber, items, onClose, onPrint, custo
 
   const handleDownloadPDF = async () => {
     try {
-      await generateInvoicePDF(invoice, company, customer, items);
+      const result = await generateInvoicePDF(invoice, company, customer, items);
+      if (result.success) {
+        alert(`PDF saved successfully!\n${result.filename || result.message || ''}`);
+      } else {
+        alert(`Failed to generate PDF: ${result.error || 'Unknown error'}`);
+      }
     } catch (error) {
       console.error('Error generating PDF:', error);
-      alert('Failed to generate PDF');
+      alert('Failed to generate PDF: ' + error.message);
     }
   };
 
@@ -65,7 +70,18 @@ const InvoicePreview = ({ invoice, invoiceNumber, items, onClose, onPrint, custo
               Download PDF
             </button>
             <button
-              onClick={onPrint}
+              onClick={async () => {
+                if (window.electronAPI && window.electronAPI.printInvoice) {
+                  try {
+                    await window.electronAPI.printInvoice();
+                  } catch (error) {
+                    console.error('Print error:', error);
+                    alert('Failed to print: ' + error.message);
+                  }
+                } else {
+                  onPrint();
+                }
+              }}
               className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 shadow-sm"
             >
               Print

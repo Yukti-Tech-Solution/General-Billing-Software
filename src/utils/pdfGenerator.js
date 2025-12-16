@@ -375,13 +375,30 @@ export const generateInvoicePDF = async (invoice, company, customer, invoiceItem
 
     addFooter(doc, layout);
 
-    const safeCustomerName = customer?.name
-      ? customer.name.replace(/[^a-z0-9]/gi, '_')
-      : 'Customer';
-    const filename = `${invoice.invoice_number || 'Invoice'}_${safeCustomerName}.pdf`;
-
-    doc.save(filename);
-    return { success: true, filename };
+    // Check if we're in Electron environment
+    if (window.electronAPI && window.electronAPI.savePDF) {
+      // Get PDF as base64 string
+      const pdfOutput = doc.output('datauristring');
+      const invoiceNumber = invoice.invoice_number || 'Invoice';
+      const invoiceDate = invoice.date || new Date().toISOString();
+      
+      // Save using Electron API to organized folder structure
+      const result = await window.electronAPI.savePDF(pdfOutput, invoiceNumber, invoiceDate);
+      
+      if (result.success) {
+        return { success: true, filename: result.filePath, message: 'PDF saved successfully' };
+      } else {
+        throw new Error(result.error || 'Failed to save PDF');
+      }
+    } else {
+      // Fallback for browser environment
+      const safeCustomerName = customer?.name
+        ? customer.name.replace(/[^a-z0-9]/gi, '_')
+        : 'Customer';
+      const filename = `${invoice.invoice_number || 'Invoice'}_${safeCustomerName}.pdf`;
+      doc.save(filename);
+      return { success: true, filename };
+    }
   } catch (error) {
     console.error('PDF generation error:', error);
     return { success: false, error: error.message };

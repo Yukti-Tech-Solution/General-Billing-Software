@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { formatCurrency } from '../utils/calculations';
 import { getDashboardStats, getLicenseStatus } from '../database/db';
 import { toast } from 'react-toastify';
+import { hasUnlimitedAccess } from '../utils/testCredentials';
 
 const Dashboard = () => {
   const [stats, setStats] = useState({
@@ -16,6 +17,7 @@ const Dashboard = () => {
   });
   const [loading, setLoading] = useState(true);
   const [licenseInfo, setLicenseInfo] = useState(null);
+  const userHasUnlimited = hasUnlimitedAccess();
 
   useEffect(() => {
     loadStats();
@@ -63,6 +65,20 @@ const Dashboard = () => {
           + New Invoice
         </Link>
       </div>
+
+      {userHasUnlimited && (
+        <div className="bg-gradient-to-r from-green-500 to-green-600 text-white rounded-lg p-4 mb-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold">🎉 Unlimited Access Enabled</h3>
+              <p className="text-sm opacity-90">
+                You have full access to all features with no license restrictions
+              </p>
+            </div>
+            <span className="text-3xl">✨</span>
+          </div>
+        </div>
+      )}
 
       {licenseInfo?.status === 'valid' && (
         <div

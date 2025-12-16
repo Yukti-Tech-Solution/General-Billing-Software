@@ -12,14 +12,18 @@ import Customers from './pages/Customers';
 import Settings from './pages/Settings';
 import LicenseManagement from './pages/LicenseManagement';
 import LicenseActivation from './components/LicenseActivation';
+import LoginScreen from './components/LoginScreen';
 import { initializeDatabase } from './database/schema';
 import { getLicenseStatus } from './database/db';
+import { hasUnlimitedAccess, createUnlimitedLicense } from './utils/testCredentials';
 
 function App() {
   const [dbInitialized, setDbInitialized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [licenseStatus, setLicenseStatus] = useState(null);
   const [checkingLicense, setCheckingLicense] = useState(true);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState(null);
   const [adminMode, setAdminMode] = useState(
     () => localStorage.getItem('adminMode') === 'true'
   );
@@ -27,12 +31,24 @@ function App() {
   useEffect(() => {
     const init = async () => {
       try {
+        // Check if user is already logged in
+        const loggedIn = localStorage.getItem('isLoggedIn') === 'true';
+        const user = JSON.parse(localStorage.getItem('currentUser') || '{}');
+
+        if (loggedIn && user.email) {
+          setIsLoggedIn(true);
+          setCurrentUser(user);
+        }
+
         // Initialize Electron API
         await window.electronAPI.dbInit();
+
         // Initialize database schema
         const result = await initializeDatabase();
         if (result.success) {
           setDbInitialized(true);
+
+          // Check license status (but will be bypassed for unlimited access users)
           try {
             const status = await getLicenseStatus();
             setLicenseStatus(status);
@@ -71,6 +87,36 @@ function App() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  const handleLogin = (user) => {
+    setIsLoggedIn(true);
+    setCurrentUser(user);
+
+    // If user has unlimited access, bypass license check
+    if (user.unlimitedAccess) {
+      setLicenseStatus({
+        status: 'valid',
+        license: createUnlimitedLicense(user.email, user.email),
+        daysRemaining: 36500 // 100 years
+      });
+      setCheckingLicense(false);
+    }
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('isLoggedIn');
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('adminMode');
+    setIsLoggedIn(false);
+    setCurrentUser(null);
+    setAdminMode(false);
+    window.location.reload();
+  };
+
+  // Show login screen first
+  if (!isLoggedIn) {
+    return <LoginScreen onLogin={handleLogin} />;
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-screen bg-gray-100">
@@ -103,7 +149,11 @@ function App() {
     );
   }
 
-  if (licenseStatus?.status === 'not_found' || licenseStatus?.status === 'expired') {
+  // BYPASS LICENSE CHECK FOR UNLIMITED ACCESS USERS
+  const userHasUnlimitedAccess = hasUnlimitedAccess();
+
+  // Show license activation only if user doesn't have unlimited access
+  if (!userHasUnlimitedAccess && (licenseStatus?.status === 'not_found' || licenseStatus?.status === 'expired')) {
     return (
       <LicenseActivation
         status={licenseStatus.status}
@@ -122,7 +172,7 @@ function App() {
       <div className="flex h-screen bg-gray-50">
         <Sidebar adminMode={adminMode} />
         <div className="flex-1 flex flex-col overflow-hidden">
-          <Header />
+          <Header currentUser={currentUser} onLogout={handleLogout} />
           <main className="flex-1 overflow-y-auto p-6">
             <Routes>
               <Route path="/" element={<Navigate to="/dashboard" replace />} />
