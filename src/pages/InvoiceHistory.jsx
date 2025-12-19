@@ -35,6 +35,42 @@ const InvoiceHistory = () => {
   const loadInvoices = async () => {
     try {
       setLoading(true);
+      
+      // Try to load from file system first
+      if (window.electronAPI && window.electronAPI.loadAllInvoices) {
+        const result = await window.electronAPI.loadAllInvoices();
+        if (result.success && result.invoices) {
+          // Normalize invoice data structure for compatibility
+          const normalized = result.invoices.map(inv => {
+            const normalizedInv = { ...inv };
+            // Ensure customer_name is at top level (might be nested in customer object)
+            if (inv.customer && !normalizedInv.customer_name) {
+              normalizedInv.customer_name = inv.customer.name;
+              normalizedInv.customer_phone = inv.customer.phone;
+              normalizedInv.customer_address = inv.customer.address;
+              normalizedInv.customer_gstin = inv.customer.gstin;
+            }
+            // Ensure status defaults to 'pending' if not set
+            if (!normalizedInv.status) {
+              normalizedInv.status = normalizedInv.balance > 0 ? 'pending' : 'paid';
+            }
+            return normalizedInv;
+          });
+          
+          // Filter by date range
+          const filtered = normalized.filter(inv => {
+            if (!fromDate || !toDate) return true;
+            const invDate = new Date(inv.date);
+            const from = new Date(fromDate);
+            const to = new Date(toDate);
+            return invDate >= from && invDate <= to;
+          });
+          setInvoices(filtered);
+          return;
+        }
+      }
+      
+      // Fallback to database
       const data = await getInvoices(fromDate, toDate);
       setInvoices(data);
     } catch (error) {
@@ -89,10 +125,70 @@ const InvoiceHistory = () => {
 
   const handleDownloadPDF = async (invoice) => {
     try {
-      const invoiceData = await getInvoice(invoice.id);
-      const items = await getInvoiceItems(invoice.id);
-      const customer = await getCustomer(invoice.customer_id);
-      const company = await getCompany();
+      // Try to open existing PDF from file system first
+      if (window.electronAPI && window.electronAPI.openInvoicePDF && invoice.invoice_number && invoice.date) {
+        const result = await window.electronAPI.openInvoicePDF({
+          invoiceNumber: invoice.invoice_number,
+          date: invoice.date
+        });
+        
+        if (result.success) {
+          toast.success('PDF opened successfully!');
+          return;
+        } else if (result.error && !result.error.includes('not found')) {
+          // If it's not a "not found" error, show it
+          console.warn('Could not open existing PDF:', result.error);
+        }
+      }
+      
+      // Generate new PDF if file doesn't exist or if file system method not available
+      let invoiceData, items, customer;
+      
+      if (invoice.id) {
+        // Load from database
+        invoiceData = await getInvoice(invoice.id);
+        items = await getInvoiceItems(invoice.id);
+        customer = invoice.customer_id ? await getCustomer(invoice.customer_id) : null;
+      } else {
+        // Use file system data structure
+        invoiceData = invoice;
+        items = invoice.items || [];
+        if (invoice.customer) {
+          customer = {
+            name: invoice.customer.name || invoice.customer_name,
+            phone: invoice.customer.phone || invoice.customer_phone,
+            address: invoice.customer.address || invoice.customer_address,
+            gstin: invoice.customer.gstin || invoice.customer_gstin
+          };
+        } else if (invoice.customer_name) {
+          customer = {
+            name: invoice.customer_name,
+            phone: invoice.customer_phone,
+            address: invoice.customer_address,
+            gstin: invoice.customer_gstin
+          };
+        } else {
+          customer = null;
+        }
+      }
+      // Load company settings from file system first, then fallback to database
+      let company = null;
+      if (window.electronAPI && window.electronAPI.loadCompanySettings) {
+        const companyResult = await window.electronAPI.loadCompanySettings();
+        if (companyResult.success && companyResult.settings) {
+          company = {
+            name: companyResult.settings.name || companyResult.settings.companyName || '',
+            phone: companyResult.settings.phone || '',
+            address: companyResult.settings.address || '',
+            gstin: companyResult.settings.gstin || '',
+            logo: companyResult.settings.logo || ''
+          };
+        }
+      }
+      // Fallback to database if file system didn't work
+      if (!company) {
+        company = await getCompany();
+      }
       const result = await generateInvoicePDF(invoiceData, company, customer, items);
       if (result.success) {
         toast.success(`PDF saved successfully!`);
@@ -113,6 +209,21 @@ const InvoiceHistory = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-800">Invoice History</h1>
+        {window.electronAPI && window.electronAPI.openBillsFolder && (
+          <button
+            onClick={async () => {
+              try {
+                await window.electronAPI.openBillsFolder();
+                toast.success('Bills folder opened');
+              } catch (error) {
+                toast.error('Failed to open folder: ' + error.message);
+              }
+            }}
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+          >
+            Open Bills Folder
+          </button>
+        )}
       </div>
 
       {/* Filters */}

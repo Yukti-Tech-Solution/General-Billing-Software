@@ -1,5 +1,5 @@
 import jsPDF from 'jspdf';
-import 'jspdf-autotable';
+import autoTable from 'jspdf-autotable';
 import { numberToWords } from './numberToWords';
 
 const PRIMARY = [43, 122, 139]; // #2B7A8B
@@ -19,7 +19,10 @@ const formatCurrency = (amount = 0) => {
   const formattedInteger = otherNumbers
     ? `${otherNumbers.replace(/\B(?=(\d{2})+(?!\d))/g, ',')},${lastThree}`
     : lastThree;
-  return `${sign}₹ ${formattedInteger}.${decimal}`;
+  // Use "Rs." instead of the rupee symbol because the
+  // default jsPDF font does not render "₹" correctly
+  // and can corrupt digits in some PDF viewers.
+  return `${sign}Rs. ${formattedInteger}.${decimal}`;
 };
 
 const formatDate = (value) => {
@@ -57,59 +60,73 @@ const convertImageToBase64 = async (imageSource) => {
 
 const addHeader = async (doc, company, invoice, layout) => {
   const { margins, pageWidth } = layout;
-  const headerHeight = 38;
+  const headerHeight = 50;
 
-  // Background bar
+  // White background for the entire page
+  doc.setFillColor(...WHITE);
+  doc.rect(0, 0, pageWidth, layout.pageHeight, 'F');
+
+  // Teal background for header section
   doc.setFillColor(...PRIMARY);
-  doc.rect(0, 0, pageWidth, headerHeight + margins.top, 'F');
+  doc.rect(0, 0, pageWidth, headerHeight, 'F');
 
-  // INVOICE title
-  doc.setTextColor(...WHITE);
+  // Company name - white text on teal background
+  const companyName = company?.name || 'INVOICE';
+  doc.setTextColor(...WHITE); // White text
   doc.setFont('helvetica', 'bold');
-  doc.setFontSize(26);
-  doc.text('INVOICE', margins.left, margins.top + 16);
-
-  // Company details (right)
-  const rightX = pageWidth - margins.right;
-  const companyLines = [
-    company?.name || 'Company Name',
-    company?.address,
-    company?.city_state_zip,
-    company?.phone ? `Phone: ${company.phone}` : null,
-    company?.email ? `Email: ${company.email}` : null,
-  ].filter(Boolean);
-
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(12);
-  doc.text(companyLines[0] || '', rightX, margins.top + 6, { align: 'right' });
-
-  doc.setFont('helvetica', 'normal');
-  doc.setFontSize(9);
-  companyLines.slice(1).forEach((line, idx) => {
-    doc.text(line, rightX, margins.top + 12 + idx * 5, { align: 'right' });
-  });
-
-  // Logo (top-right corner)
+  doc.setFontSize(24);
+  
+  // Logo (left side, before company name)
+  let nameX = margins.left;
   if (company?.logo) {
     try {
       const logoBase64 = await convertImageToBase64(company.logo);
       if (logoBase64) {
-        const size = 24;
+        const size = 30;
         doc.addImage(
           logoBase64,
           'PNG',
-          rightX - size,
-          margins.top + 16,
+          margins.left,
+          margins.top + 10,
           size,
           size,
           undefined,
           'FAST',
         );
+        nameX = margins.left + size + 10;
       }
     } catch (error) {
       console.warn('Logo could not be loaded:', error);
     }
   }
+  
+  doc.text(companyName, nameX, margins.top + 20);
+
+  // Company details below company name (white text)
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(...WHITE);
+  
+  let detailY = margins.top + 28;
+  if (company?.address) {
+    doc.text(company.address, nameX, detailY);
+    detailY += 5;
+  }
+  if (company?.phone) {
+    doc.text(`Phone: ${company.phone}`, nameX, detailY);
+    detailY += 5;
+  }
+  if (company?.gstin) {
+    doc.text(`GSTIN: ${company.gstin}`, nameX, detailY);
+    detailY += 5;
+  }
+
+  // Invoice number and date (right side, white text)
+  const rightX = pageWidth - margins.right;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(`Invoice No: ${invoice?.invoice_number || ''}`, rightX, margins.top + 12, { align: 'right' });
+  doc.text(`Date: ${invoice?.date ? new Date(invoice.date).toLocaleDateString() : ''}`, rightX, margins.top + 19, { align: 'right' });
 
   return headerHeight + margins.top + 6;
 };
@@ -177,7 +194,7 @@ const addItemsTable = (doc, items, startY, layout) => {
     formatCurrency(item.amount),
   ]);
 
-  doc.autoTable({
+  autoTable(doc, {
     startY,
     head: [['Item', 'Description', 'Hours', 'Rate', 'Amount']],
     body,
@@ -243,7 +260,7 @@ const addTotalsSection = (doc, invoice, invoiceItems, startY, layout) => {
   const tableWidth = 90;
   const tableX = layout.pageWidth - layout.margins.right - tableWidth;
 
-  doc.autoTable({
+  autoTable(doc, {
     startY,
     body: totalsData,
     theme: 'plain',
@@ -326,13 +343,28 @@ const addNotesSection = (doc, notes, startY, layout) => {
 
 const addFooter = (doc, layout) => {
   const { pageWidth, pageHeight } = layout;
-  const footerHeight = 14;
-  doc.setFillColor(...PRIMARY);
-  doc.rect(0, pageHeight - footerHeight, pageWidth, footerHeight, 'F');
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(10);
-  doc.setTextColor(...WHITE);
-  doc.text('Thank you for your business!', pageWidth / 2, pageHeight - 5, { align: 'center' });
+  
+  // Add branding footer with link
+  doc.setFontSize(8);
+  doc.setTextColor(...TEXT_SECONDARY);
+  const footerY = pageHeight - 10;
+  
+  // "Created by Yukti Tech Solution" text
+  doc.text('Created by Yukti Tech Solution', 10, footerY);
+  
+  // Add clickable link (jsPDF supports textWithLink)
+  try {
+    doc.setTextColor(41, 128, 185); // Blue color for link
+    doc.textWithLink('https://yuktitechsolution.co.in/', 10, footerY + 5, {
+      url: 'https://yuktitechsolution.co.in/'
+    });
+  } catch (error) {
+    // Fallback if textWithLink is not available
+    doc.text('https://yuktitechsolution.co.in/', 10, footerY + 5);
+  }
+  
+  // Reset text color
+  doc.setTextColor(...TEXT_PRIMARY);
 };
 
 export const generateInvoicePDF = async (invoice, company, customer, invoiceItems) => {
@@ -376,13 +408,65 @@ export const generateInvoicePDF = async (invoice, company, customer, invoiceItem
     addFooter(doc, layout);
 
     // Check if we're in Electron environment
-    if (window.electronAPI && window.electronAPI.savePDF) {
-      // Get PDF as base64 string
+    if (window.electronAPI && window.electronAPI.saveInvoicePDF) {
+      // Get PDF as ArrayBuffer
+      const pdfArrayBuffer = doc.output('arraybuffer');
+      const invoiceNumber = invoice.invoice_number || 'Invoice';
+      const invoiceDate = invoice.date || new Date().toISOString();
+      
+      // Convert ArrayBuffer to Uint8Array for IPC transfer
+      const uint8Array = new Uint8Array(pdfArrayBuffer);
+      
+      // Save PDF using new file system structure
+      const pdfResult = await window.electronAPI.saveInvoicePDF({
+        invoiceNumber,
+        date: invoiceDate,
+        pdfBuffer: Array.from(uint8Array) // Send as array for IPC
+      });
+      
+      // Save metadata
+      const invoiceData = {
+        ...invoice,
+        // Ensure customer_name is at top level for compatibility
+        customer_name: invoice.customer_name || customer?.name || null,
+        customer_phone: invoice.customer_phone || customer?.phone || null,
+        customer_address: invoice.customer_address || customer?.address || null,
+        customer_gstin: invoice.customer_gstin || customer?.gstin || null,
+        // Also include nested customer object for detailed access
+        customer: customer ? {
+          name: customer.name,
+          phone: customer.phone,
+          address: customer.address,
+          gstin: customer.gstin
+        } : null,
+        items: invoiceItems.map(item => ({
+          product_name: item.product_name,
+          description: item.description,
+          quantity: item.quantity,
+          price: item.price,
+          amount: item.amount,
+          tax_rate: item.tax_rate,
+          hsn_code: item.hsn_code
+        }))
+      };
+      
+      const metadataResult = await window.electronAPI.saveInvoiceMetadata({
+        invoiceNumber,
+        date: invoiceDate,
+        invoiceData
+      });
+      
+      if (pdfResult.success && metadataResult.success) {
+        return { success: true, filename: pdfResult.path, message: 'PDF saved successfully' };
+      } else {
+        throw new Error(pdfResult.error || metadataResult.error || 'Failed to save PDF');
+      }
+    } else if (window.electronAPI && window.electronAPI.savePDF) {
+      // Fallback to old method
       const pdfOutput = doc.output('datauristring');
       const invoiceNumber = invoice.invoice_number || 'Invoice';
       const invoiceDate = invoice.date || new Date().toISOString();
       
-      // Save using Electron API to organized folder structure
       const result = await window.electronAPI.savePDF(pdfOutput, invoiceNumber, invoiceDate);
       
       if (result.success) {

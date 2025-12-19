@@ -49,6 +49,7 @@ const Settings = () => {
     checkAuthState();
     loadSyncSettings();
     checkOnlineStatus();
+    showBillsFolderPath();
     
     // Listen to auth state changes
     const unsubscribe = onAuthStateChange((currentUser) => {
@@ -117,9 +118,42 @@ const Settings = () => {
     return isOnline;
   };
 
+  const showBillsFolderPath = async () => {
+    try {
+      if (window.electronAPI && window.electronAPI.getBillsFolderPath) {
+        const result = await window.electronAPI.getBillsFolderPath();
+        if (result.success && result.path) {
+          const pathInput = document.getElementById('bills-folder-path');
+          if (pathInput) {
+            pathInput.value = result.path;
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error loading bills folder path:', error);
+    }
+  };
+
   const loadCompany = async () => {
     try {
       setLoading(true);
+      
+      // Try file-based storage first (new method)
+      if (window.electronAPI && window.electronAPI.loadCompanySettings) {
+        const result = await window.electronAPI.loadCompanySettings();
+        if (result.success && result.settings) {
+          setCompany({
+            name: result.settings.name || result.settings.companyName || '',
+            phone: result.settings.phone || '',
+            address: result.settings.address || '',
+            gstin: result.settings.gstin || '',
+            logo: result.settings.logo || ''
+          });
+          return;
+        }
+      }
+      
+      // Fallback to database
       const companyData = await getCompany();
       if (companyData) {
         setCompany(companyData);
@@ -162,11 +196,41 @@ const Settings = () => {
 
     try {
       setSaving(true);
+      
+      // Try file-based storage first (new method)
+      if (window.electronAPI && window.electronAPI.saveCompanySettings) {
+        const settings = {
+          name: company.name,
+          companyName: company.name, // Alias for compatibility
+          phone: company.phone,
+          address: company.address,
+          gstin: company.gstin,
+          logo: company.logo
+        };
+        
+        const result = await window.electronAPI.saveCompanySettings(settings);
+        
+        if (result.success) {
+          toast.success('Company details saved successfully');
+          // Also save to database for backward compatibility
+          try {
+            await saveCompany(company);
+          } catch (dbError) {
+            console.warn('Failed to save to database (non-critical):', dbError);
+          }
+          await updateSyncStatus();
+          return;
+        } else {
+          throw new Error(result.error || 'Failed to save settings');
+        }
+      }
+      
+      // Fallback to database only
       await saveCompany(company);
       toast.success('Company details saved successfully');
       await updateSyncStatus();
     } catch (error) {
-      toast.error('Failed to save company details');
+      toast.error('Failed to save company details: ' + (error.message || 'Unknown error'));
       console.error('Error saving company:', error);
     } finally {
       setSaving(false);
@@ -616,6 +680,48 @@ const Settings = () => {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Bills Storage Location Section */}
+      <div className="bg-white rounded-lg shadow-md p-6">
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Bills Storage Location</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Storage Path
+            </label>
+            <div className="flex items-center space-x-2">
+              <input
+                type="text"
+                id="bills-folder-path"
+                readOnly
+                value="Loading..."
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 text-gray-600 text-sm"
+              />
+              <button
+                onClick={async () => {
+                  try {
+                    const result = await window.electronAPI.openBillsFolder();
+                    if (result.success) {
+                      toast.success('Bills folder opened');
+                    } else {
+                      toast.error('Failed to open folder: ' + result.error);
+                    }
+                  } catch (error) {
+                    toast.error('Failed to open folder: ' + error.message);
+                  }
+                }}
+                className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 transition-colors"
+              >
+                📁 Open Bills Folder
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              Invoices are automatically saved in organized folders by year and month.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );

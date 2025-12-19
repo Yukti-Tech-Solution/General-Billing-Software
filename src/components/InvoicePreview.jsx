@@ -18,8 +18,26 @@ const InvoicePreview = ({ invoice, invoiceNumber, items, onClose, onPrint, custo
 
   const loadCompany = async () => {
     try {
+      // Try file-based storage first (new method)
+      if (window.electronAPI && window.electronAPI.loadCompanySettings) {
+        const result = await window.electronAPI.loadCompanySettings();
+        if (result.success && result.settings) {
+          setCompany({
+            name: result.settings.name || result.settings.companyName || '',
+            phone: result.settings.phone || '',
+            address: result.settings.address || '',
+            gstin: result.settings.gstin || '',
+            logo: result.settings.logo || ''
+          });
+          return;
+        }
+      }
+      
+      // Fallback to database
       const companyData = await getCompany();
-      setCompany(companyData);
+      if (companyData) {
+        setCompany(companyData);
+      }
     } catch (error) {
       console.error('Error loading company:', error);
     }
@@ -36,7 +54,15 @@ const InvoicePreview = ({ invoice, invoiceNumber, items, onClose, onPrint, custo
 
   const handleDownloadPDF = async () => {
     try {
-      const result = await generateInvoicePDF(invoice, company, customer, items);
+      // Ensure the invoice passed to the PDF generator has
+      // a proper invoice_number value (for previews it may
+      // only be available via the invoiceNumber prop).
+      const invoiceForPdf = {
+        ...invoice,
+        invoice_number: invoice.invoice_number || invoiceNumber || invoice.invoiceNumber || null,
+      };
+
+      const result = await generateInvoicePDF(invoiceForPdf, company, customer, items);
       if (result.success) {
         alert(`PDF saved successfully!\n${result.filename || result.message || ''}`);
       } else {
@@ -110,12 +136,14 @@ const InvoicePreview = ({ invoice, invoiceNumber, items, onClose, onPrint, custo
                   </div>
                   <div>
                     <p className="text-xs uppercase tracking-widest text-white/80">Invoice</p>
-                    <h1 className="text-3xl font-bold leading-tight">INVOICE</h1>
+                    <h1 className="text-3xl font-bold leading-tight">{company?.name || 'INVOICE'}</h1>
                   </div>
                 </div>
-                <p className="text-sm text-white/90">
-                  {company?.name || 'Company Name'}
-                </p>
+                {company?.address && (
+                  <p className="text-sm text-white/90">
+                    {company.address}
+                  </p>
+                )}
                 {company?.address && <p className="text-xs text-white/80">{company.address}</p>}
                 {(company?.phone || company?.email) && (
                   <p className="text-xs text-white/80">
